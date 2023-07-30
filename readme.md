@@ -14,7 +14,7 @@ Amazon EKSとKubernetesを使用したデプロイメントリソース。
 
 下記にaws構成図を示す ※一部抜粋
 
-<img width="718" alt="aws構成図" src="https://github.com/joey23008/altair/assets/35098718/9e4b179a-18cc-4733-8654-af140f78b488">
+<img width="718" alt="aws構成図" src="https://github.com/altair-development/altair-development/assets/140937480/da63c974-0297-4d47-a206-9d753d41b0be">
 
 ## How to use
 まず最初に下記のコマンドを実行しdeployレポジトリをクローンします。
