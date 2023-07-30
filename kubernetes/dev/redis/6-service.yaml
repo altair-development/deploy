@@ -1,0 +1,14 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name:  redis-sentinel
+  namespace: redis-dev
+spec:
+  selector:
+    type: redis-sentinel
+  type:  ClusterIP
+  clusterIP: None
+  ports:
+  - name:  redis
+    port:  26379
+    targetPort:  26379

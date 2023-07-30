@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+  namespace: mongo-dev
+spec:
+  serviceName: mongo
+  replicas: 3
+  selector:
+    matchLabels:
+      replicaset: MainRepSet
+  template:
+    metadata:
+      labels:
+        role: mongo
+        environment: dev
+        replicaset: MainRepSet
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: eks.amazonaws.com/nodegroup
+                operator: In
+                values:
+                - private-workers-dev
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: replicaset
+                  operator: In
+                  values:
+                  - MainRepSet
+              topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 10
+      serviceAccountName: mongo
+      containers:
+        - name: mongo
+          image: mongo:5.0.9
+          command:
+          - /bin/sh
+          - -c
+          - >
+            if [ -f /data/db/admin-user.lock ]; then
+              echo "KUBERNETES LOG $HOSTNAME- Starting Mongo Daemon with runtime settings (clusterAuthMode)"
+              #ensure wiredTigerCacheSize is set within the size of the containers memory limit
+              mongod --wiredTigerCacheSizeGB 0.25 --replSet MainRepSet --bind_ip 0.0.0.0 --clusterAuthMode keyFile --keyFile /etc/secrets-volume/mongodb-keyfile --setParameter authenticationMechanisms=SCRAM-SHA-1;
+            else
+              echo "KUBERNETES LOG $HOSTNAME- Starting Mongo Daemon with setup setting (authMode)"
+              mongod --auth;
+            fi;
+          lifecycle:
+              postStart:
+                exec:
+                  command:
+                  - /bin/sh
+                  - -c
+                  - >
+                    if [ ! -f /data/db/admin-user.lock ]; then
+                      echo "KUBERNETES LOG $HOSTNAME- no Admin-user.lock file found yet"
+                      #replaced simple sleep, with ping and test.
+                      while (! mongo --eval "db.adminCommand('ping')"); do sleep 10; echo "KUBERNETES LOG $HOSTNAME - waiting another 10 seconds for mongo to start" >> /data/db/configlog.txt; done;
+                      touch /data/db/admin-user.lock
+                      if [ "$HOSTNAME" = "mongo-0" ]; then
+                        echo "KUBERNETES LOG $HOSTNAME- creating admin user ${MONGO_DB_USER_ADMIN}"
+                        mongo < /secret/script/createDbAdmin.js >> /data/db/config.log
+                        mongo localhost:27017/admin -u $MONGO_DB_USER_ADMIN -p $MONGO_DB_PASS_ADMIN < /secret/script/createDbAltair.js >> /data/db/config.log
+                      fi;
+                      echo "KUBERNETES LOG $HOSTNAME-shutting mongod down for final restart"
+                      mongod --shutdown;
+                    fi;
+          envFrom:
+            - prefix: MONGO_
+              secretRef:
+                name: mongo-access-creds
+          ports:
+            - containerPort: 27017
+          livenessProbe:
+            exec:
+              command:
+              - mongo
+              - --eval
+              - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+              - mongo
+              - --eval
+              - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: mongo-key
+              mountPath: /etc/secrets-volume
+              readOnly: true
+            - name: mongo-persistent-storage
+              mountPath: /data/db
+            - name: mongo-script
+              mountPath: /secret/script
+          resources:
+            requests:
+              cpu: 1
+              memory: 2Gi
+        - name: mongo-sidecar
+          image: 053312591179.dkr.ecr.ap-northeast-1.amazonaws.com/mongo-k8s-sidecar
+          env:
+            - name: MONGO_SIDECAR_POD_LABELS
+              value: "role=mongo,environment=dev"
+            - name: KUBE_NAMESPACE
+              value: "mongo-dev"
+            - name: KUBERNETES_MONGO_SERVICE_NAME
+              value: "mongo"
+            - name: MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-access-creds
+                  key: DB_USER_ADMIN
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-access-creds
+                  key: DB_PASS_ADMIN
+            - name: MONGODB_DATABASE
+              value: admin
+      volumes:
+      - name: mongo-key
+        secret:
+          defaultMode: 0400
+          secretName: mongo-key
+      - name: mongo-script
+        secret:
+          defaultMode: 256
+          secretName: mongo-script
+  volumeClaimTemplates:
+  - metadata:
+      name: mongo-persistent-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: gp2
+      resources:
+        requests:
+          storage: 10Gi

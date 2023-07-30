@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: altair-spa-depl
+  namespace: "altair-spa-dev"
+spec:
+  selector:
+    matchLabels:
+      app: altair-spa
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: altair-spa
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: eks.amazonaws.com/nodegroup
+                operator: In
+                values:
+                - public-workers-dev
+      containers:
+      - name: nodejs-container
+        image: node:18.16.1
+        ports:
+          - containerPort: 80
+        command: ["/bin/sh", "-c"]
+        args:
+          - export TERM=xterm;
+            APPROOT=/var/www/html;
+            mkdir -p $APPROOT;
+            cd $APPROOT;
+            git clone -b $GIT_CLONE_BLANCH $GIT_CLONE_URL .;
+            cp /secret/.env.local ./.env.local;
+            npm ci;
+            npm run build;
+            PORT=80 npm run start &
+            chmod 777 ${APPROOT}/check.sh;
+            ${APPROOT}/check.sh $GIT_CLONE_BLANCH;
+        envFrom:
+        - prefix: GIT_
+          secretRef:
+            name: git-access-creds-spa
+        volumeMounts:
+        - name: spa-env
+          mountPath: /secret
+      volumes:
+      - name: spa-env
+        secret:
+          defaultMode: 256
+          secretName: spa-env

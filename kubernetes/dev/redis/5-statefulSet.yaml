@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-server
+  namespace: redis-dev
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      type: redis-server
+  serviceName: redis-server
+  template:
+    metadata:
+      labels:
+        type: redis-server
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: eks.amazonaws.com/nodegroup
+                operator: In
+                values:
+                - private-workers-dev
+      containers:
+      - name: redis
+        image: 053312591179.dkr.ecr.ap-northeast-1.amazonaws.com/redis-server
+        command:
+        - "/scripts/entrypoint.sh"
+        ports:
+          - containerPort: 6379
+            name:  redis
+        env:
+        - name: REDIS_REQUIREPASS
+          valueFrom:
+            secretKeyRef:
+              name: redis-access-creds
+              key: requirepass
+        volumeMounts:
+          - name: redis-shared
+            mountPath: /redis/share
+      volumes:
+      - name: redis-shared
+        persistentVolumeClaim:
+          claimName: efs-claim

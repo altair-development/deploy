@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-sentinel
+  namespace: redis-dev
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      type: redis-sentinel
+  serviceName: redis-sentinel
+  template:
+    metadata:
+      labels:
+        type: redis-sentinel
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: eks.amazonaws.com/nodegroup
+                operator: In
+                values:
+                - private-workers-dev
+      initContainers:
+      - name: wait-container
+        image: 053312591179.dkr.ecr.ap-northeast-1.amazonaws.com/redis-sentinel
+        command: ['sh','-c','until [ -f /redis/share/master ]; do echo waiting for redis server... >> /redis/share/sentinel.log; cat /redis/share/master >> /redis/share/sentinel.log; sleep 10; done']
+        volumeMounts:
+          - name: redis-shared
+            mountPath: /redis/share
+      containers:
+      - name: redis-sentinel
+        image: 053312591179.dkr.ecr.ap-northeast-1.amazonaws.com/redis-sentinel
+        command:
+        - "/scripts/entrypoint-sentinel.sh"
+        env:
+        - name: REDIS_REQUIREPASS
+          valueFrom:
+            secretKeyRef:
+              name: redis-access-creds
+              key: requirepass
+        ports:
+          - containerPort: 26379
+            name: sentinel
+        volumeMounts:
+          - name: redis-shared
+            mountPath: /redis/share
+      volumes:
+      - name: redis-shared
+        persistentVolumeClaim:
+          claimName: efs-claim

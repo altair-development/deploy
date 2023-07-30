@@ -1,0 +1,4 @@
+*.conf
+docker/redis-sentinel/scripts
+kubernetes/dev/secret
+setting.sh

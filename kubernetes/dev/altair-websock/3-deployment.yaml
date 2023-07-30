@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: altair-websock-depl
+  namespace: "altair-websock-dev"
+spec:
+  selector:
+    matchLabels:
+      app: altair-websock
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: altair-websock
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: eks.amazonaws.com/nodegroup
+                operator: In
+                values:
+                - public-workers-dev
+      containers:
+      - name: nodejs-container
+        image: node:14.16.1
+        ports:
+          - containerPort: 80
+        command: ["/bin/sh", "-c"]
+        args:
+          - export TERM=xterm;
+            APPROOT=/var/www/html;
+            mkdir -p $APPROOT;
+            cd $APPROOT;
+            git clone -b $GIT_CLONE_BLANCH $GIT_CLONE_URL .;
+            cp /secret/.env ./.env;
+            npm install;
+            PODIP=$POD_IP node index &
+            chmod 777 ${APPROOT}/check.sh;
+            ${APPROOT}/check.sh $GIT_CLONE_BLANCH;
+        envFrom:
+        - prefix: GIT_
+          secretRef:
+            name: git-access-creds-websock
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: websock-env
+          mountPath: /secret
+      - name: sidecar-container
+        image: node:14.16.1
+        ports:
+          - containerPort: 8000
+        command: ["/bin/sh", "-c"]
+        args:
+          - export TERM=xterm;
+            APPROOT=/var/www/html;
+            mkdir -p $APPROOT;
+            cd $APPROOT;
+            git clone -b $GIT_CLONE_BLANCH $GIT_CLONE_URL .;
+            cp /secret/.env ./.env;
+            npm ci;
+            PODIP=$POD_IP node index &
+            chmod 777 ${APPROOT}/check.sh;
+            ${APPROOT}/check.sh $GIT_CLONE_BLANCH;
+        envFrom:
+        - prefix: GIT_
+          secretRef:
+            name: git-access-creds-websock-monitor
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: websock-monitor-env
+          mountPath: /secret
+      volumes:
+      - name: websock-env
+        secret:
+          defaultMode: 256
+          secretName: websock-env
+      - name: websock-monitor-env
+        secret:
+          defaultMode: 256
+          secretName: websock-monitor-env

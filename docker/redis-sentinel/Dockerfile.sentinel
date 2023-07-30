@@ -1,0 +1,6 @@
+FROM redis:6.2.6
+WORKDIR /redis
+COPY redis-sentinel.conf /redis/
+COPY ./scripts/ /scripts/
+ENV REDIS_SENTINEL_CONF /redis/redis-sentinel.conf
+ENTRYPOINT [ "sh","-c","redis-server", "${REDIS_SENTINEL_CONF}", "--sentinel" ]
