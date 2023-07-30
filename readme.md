@@ -1,4 +1,4 @@
-# altair/deploy
+# deploy
 Amazon EKSとKubernetesを使用したデプロイメントリソース。  
 起動用bashスクリプトによりデプロイを自動化している。
 
@@ -17,9 +17,9 @@ Amazon EKSとKubernetesを使用したデプロイメントリソース。
 <img width="718" alt="aws構成図" src="https://github.com/joey23008/altair/assets/35098718/9e4b179a-18cc-4733-8654-af140f78b488">
 
 ## How to use
-まず最初に下記のコマンドを実行しaltairレポジトリをクローンします。
+まず最初に下記のコマンドを実行しdeployレポジトリをクローンします。
 ```
-git clone https://github.com/joey23008/altair.git
+git clone https://github.com/altair-development/deploy.git
 ```
 
 `deploy/kubernetes/dev`直下に`secret`フォルダを作成し下記のファイルを追加します。
@@ -47,7 +47,7 @@ git clone https://github.com/joey23008/altair.git
 
 下記コマンドを実行しscriptフォルダに移動します。
 ```
-cd .\altair\deploy\kubernetes\dev\script\deploy
+cd .\deploy\kubernetes\dev\script\deploy
 ```
 下記コマンドを実行し`setting.sh.tmp`ファイルを`setting.sh`のファイル名でコピーします。
 ```
